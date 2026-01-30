@@ -2,9 +2,17 @@
 
 set -e
 
-echo "🚀 Setting up PrivateGPT Development Environment..."
+echo "🚀 Setting up PrivateGPT with NVIDIA GPU Support..."
 
-# Clone PrivateGPT if not already in workspace
+# Check GPU
+echo "🔍 Checking GPU..."
+if command -v nvidia-smi &> /dev/null; then
+    nvidia-smi
+else
+    echo "⚠️ nvidia-smi not found. GPU may not be available."
+fi
+
+# Clone PrivateGPT if needed
 if [ ! -f "/workspace/pyproject.toml" ]; then
     echo "📦 Cloning PrivateGPT repository..."
     git clone https://github.com/imartinez/privateGPT.git /tmp/privateGPT-temp
@@ -12,7 +20,7 @@ if [ ! -f "/workspace/pyproject.toml" ]; then
     rm -rf /tmp/privateGPT-temp
 fi
 
-# Ensure directories exist
+# Ensure directories
 sudo mkdir -p /workspace-data /workspace-models /workspace-db /workspace-db/chroma
 sudo chown -R vscode:vscode /workspace /workspace-data /workspace-models /workspace-db
 
@@ -23,174 +31,83 @@ if [ ! -d "/workspace/.venv" ]; then
     uv venv .venv
 fi
 
-# Activate virtual environment
 source .venv/bin/activate
 
-# Install PrivateGPT and dependencies
-echo "📦 Installing Python dependencies..."
-uv pip install --system -e ".[local,ui,test]"
+# Install with GPU support
+echo "📦 Installing Python dependencies with CUDA support..."
+uv pip install --system -e ".[local,ui,test]" || echo "⚠️ PrivateGPT installation failed, continuing..."
 
-# Install additional development tools
-echo "🔧 Installing development tools..."
-uv pip install --system \
-    jupyterlab \
-    ipykernel \
-    black \
-    isort \
-    mypy \
-    pytest \
-    pytest-cov \
-    pytest-asyncio \
-    pre-commit \
-    watchdog \
-    rope
+# Install GPU monitoring tools
+echo "📊 Installing GPU monitoring tools..."
+uv pip install --system nvidia-ml-py gpustat
 
-# Set up pre-commit hooks
-echo "⚙️ Setting up pre-commit..."
-pre-commit install
+# Test GPU
+echo "🧪 Testing GPU..."
+python -c "
+import torch
+print(f'PyTorch Version: {torch.__version__}')
+print(f'CUDA Available: {torch.cuda.is_available()}')
+if torch.cuda.is_available():
+    print(f'CUDA Device Count: {torch.cuda.device_count()}')
+    print(f'Current CUDA Device: {torch.cuda.current_device()}')
+    print(f'CUDA Device Name: {torch.cuda.get_device_name(0)}')
+    print(f'CUDA Memory Allocated: {torch.cuda.memory_allocated(0) / 1e9:.2f} GB')
+    print(f'CUDA Memory Cached: {torch.cuda.memory_reserved(0) / 1e9:.2f} GB')
+"
 
-# Install Node.js dependencies for UI if present
-if [ -f "/workspace/ui/package.json" ]; then
-    echo "📦 Installing Node.js dependencies..."
-    cd /workspace/ui
-    npm install || yarn install || pnpm install
-    cd /workspace
-fi
-
-# Create default environment file
+# Create environment file
 echo "⚙️ Creating environment configuration..."
 cat > /workspace/.env << 'EOF'
-# PrivateGPT Development Environment
-PGPT_PROFILES=local,dev
+# GPU Configuration
+PGPT_PROFILES=local,dev,gpu
+PGPT_DEVICE=cuda:0
+
+# Paths
 PGPT_DATA_DIR=/workspace-data
 PGPT_MODELS_DIR=/workspace-models
 PGPT_DB_DIR=/workspace-db
 
-# Database URLs
-DATABASE_URL=postgresql://privategpt:privategpt123@postgres:5432/privategpt
-REDIS_URL=redis://redis:6379/0
-MINIO_ENDPOINT=minio:9000
-MINIO_ACCESS_KEY=minioadmin
-MINIO_SECRET_KEY=minioadmin123
+# GPU Settings
+TORCH_CUDA_ARCH_LIST=7.5;8.0;8.6;8.9;9.0
+TF_FORCE_GPU_ALLOW_GROWTH=true
 
-# LLM Settings (configure in .env.local)
-# OPENAI_API_KEY=
-# ANTHROPIC_API_KEY=
-# GROQ_API_KEY=
-# TOGETHER_API_KEY=
-
-# Local Model Paths
-LOCAL_LLM_MODEL_PATH=/workspace-models/mistral-7b-instruct-v0.2.Q4_K_M.gguf
-LOCAL_EMBEDDING_MODEL_PATH=/workspace-models/all-MiniLM-L6-v2
-
-# ChromaDB Settings
+# Database
 CHROMA_PERSIST_DIRECTORY=/workspace-db/chroma
-CHROMA_COLLECTION_NAME=privategpt
 
-# Server Settings
+# Server
 API_HOST=0.0.0.0
 API_PORT=8000
 UI_PORT=8501
-JUPYTER_PORT=8888
-
-# Logging
-LOG_LEVEL=INFO
-LOG_FILE=/workspace-data/privategpt.log
 EOF
 
-# Create local environment file template
-cat > /workspace/.env.local.template << 'EOF'
-# Copy to .env.local and fill in your API keys
-OPENAI_API_KEY=your_openai_api_key_here
-ANTHROPIC_API_KEY=your_anthropic_api_key_here
-GROQ_API_KEY=your_groq_api_key_here
-TOGETHER_API_KEY=your_together_api_key_here
-COHERE_API_KEY=your_cohere_api_key_here
-EOF
-
-# Download sample model if not present
-echo "🤖 Checking for models..."
-if [ ! -f "/workspace-models/mistral-7b-instruct-v0.2.Q4_K_M.gguf" ]; then
-    echo "📥 Would you like to download a sample model? (y/N)"
-    read -r response
-    if [[ "$response" =~ ^([yY][eE][sS]|[yY])$ ]]; then
-        echo "📥 Downloading sample model..."
-        cd /workspace-models
-        wget -q --show-progress \
-            https://huggingface.co/TheBloke/Mistral-7B-Instruct-v0.2-GGUF/resolve/main/mistral-7b-instruct-v0.2.Q4_K_M.gguf \
-            -O mistral-7b-instruct-v0.2.Q4_K_M.gguf || \
-        echo "⚠️ Model download failed. You can download manually to /workspace-models/"
-    fi
-fi
-
-# Download embedding model
-if [ ! -d "/workspace-models/all-MiniLM-L6-v2" ]; then
-    echo "📥 Downloading embedding model..."
-    python -c "
-from sentence_transformers import SentenceTransformer
-model = SentenceTransformer('all-MiniLM-L6-v2')
-model.save('/workspace-models/all-MiniLM-L6-v2')
-print('✅ Embedding model downloaded')
-" || echo "⚠️ Failed to download embedding model"
-fi
-
-# Create helper scripts
+# Helper scripts
 echo "📝 Creating helper scripts..."
 
-cat > /usr/local/bin/start-api << 'EOF'
+cat > /usr/local/bin/gpu-info << 'EOF'
 #!/bin/bash
-cd /workspace
-source .venv/bin/activate
-python -m private_gpt
+python -c "
+import torch
+print('=== GPU Information ===')
+print(f'PyTorch CUDA available: {torch.cuda.is_available()}')
+if torch.cuda.is_available():
+    for i in range(torch.cuda.device_count()):
+        print(f'GPU {i}: {torch.cuda.get_device_name(i)}')
+        print(f'  Memory: {torch.cuda.get_device_properties(i).total_memory / 1e9:.2f} GB')
+"
+gpustat --color
 EOF
 
-cat > /usr/local/bin/start-ui << 'EOF'
-#!/bin/bash
-cd /workspace
-source .venv/bin/activate
-streamlit run private_gpt/ui/streamlit.py --server.port 8501 --server.address 0.0.0.0
-EOF
-
-cat > /usr/local/bin/start-jupyter << 'EOF'
-#!/bin/bash
-cd /workspace
-source .venv/bin/activate
-jupyter lab --ip=0.0.0.0 --port=8888 --no-browser --allow-root
-EOF
-
-cat > /usr/local/bin/ingest-docs << 'EOF'
-#!/bin/bash
-cd /workspace
-source .venv/bin/activate
-python scripts/ingest.py "$@"
-EOF
-
-chmod +x /usr/local/bin/start-api /usr/local/bin/start-ui /usr/local/bin/start-jupyter /usr/local/bin/ingest-docs
+chmod +x /usr/local/bin/gpu-info
 
 # Set permissions
 sudo chown -R vscode:vscode /workspace /workspace-data /workspace-models /workspace-db
 
-echo "✅ Setup complete!"
+echo "✅ GPU Setup complete!"
 echo ""
-echo "📋 Available commands:"
-echo "  start-api       - Start PrivateGPT API server"
-echo "  start-ui        - Start Streamlit UI"
-echo "  start-jupyter   - Start Jupyter Lab"
-echo "  ingest-docs     - Ingest documents"
+echo "📋 Commands:"
+echo "  gpu-info           - Show GPU information"
+echo "  start-api          - Start API server"
+echo "  start-ui           - Start Streamlit UI"
 echo ""
-echo "🌐 Services:"
-echo "  - UI:          http://localhost:8501"
-echo "  - API:         http://localhost:8000"
-echo "  - Jupyter:     http://localhost:8888"
-echo "  - MinIO Console: http://localhost:9001"
-echo ""
-echo "📁 Data locations:"
-echo "  - Code:        /workspace"
-echo "  - Documents:   /workspace-data"
-echo "  - Models:      /workspace-models"
-echo "  - Database:    /workspace-db"
-echo ""
-echo "🐳 Docker services:"
-echo "  - PostgreSQL:  localhost:5432 (user: privategpt, pass: privategpt123)"
-echo "  - Redis:       localhost:6379"
-echo "  - MinIO:       localhost:9000"
+echo "🎯 GPU Device:"
+gpu-info
