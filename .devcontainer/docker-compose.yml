@@ -29,8 +29,8 @@ services:
       - ./shared-data:/workspace/shared-data:rw
       
       # Optional: GPU support
-      # - /usr/lib/wsl:/usr/lib/wsl:ro  # For WSL2
-      # - /usr/local/cuda:/usr/local/cuda:ro
+      - /usr/lib/wsl:/usr/lib/wsl:ro  # For WSL2
+      - /usr/local/cuda:/usr/local/cuda:ro
     
     # Environment variables
     environment:
