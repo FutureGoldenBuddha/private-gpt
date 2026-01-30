@@ -1,1 +1,195 @@
- 
+{
+  "name": "PrivateGPT Development",
+  "dockerComposeFile": "docker-compose.yml",
+  "service": "privategpt-dev",
+  "workspaceFolder": "/workspace",
+  "remoteUser": "vscode",
+  
+  // Post-create commands
+  "postCreateCommand": "bash .devcontainer/post-create.sh",
+  
+  // Post-start commands
+  "postStartCommand": "echo '🚀 PrivateGPT Development Environment Ready!' && python --version",
+  
+  // Features (optional - can install via Dockerfile instead)
+  "features": {
+    "ghcr.io/devcontainers/features/common-utils:2": {
+      "installZsh": true,
+      "configureZshAsDefaultShell": true,
+      "username": "vscode"
+    },
+    "ghcr.io/devcontainers/features/git:1": {},
+    "ghcr.io/devcontainers/features/github-cli:1": {}
+  },
+  
+  // Container environment
+  "containerEnv": {
+    // Development
+    "NODE_ENV": "development",
+    "PYTHONPATH": "/workspace",
+    
+    // PrivateGPT
+    "PGPT_PROFILES": "local,dev",
+    "PGPT_DATA_DIR": "/workspace-data",
+    "PGPT_MODELS_DIR": "/workspace-models",
+    "PGPT_DB_DIR": "/workspace-db",
+    
+    // UI
+    "STREAMLIT_SERVER_PORT": "8501",
+    "STREAMLIT_SERVER_ADDRESS": "0.0.0.0",
+    
+    // Terminal
+    "TERM": "xterm-256color",
+    "SHELL": "/bin/zsh"
+  },
+  
+  // Forward ports
+  "forwardPorts": [
+    8501,  // Streamlit UI
+    8000,  // FastAPI
+    8888,  // Jupyter
+    3000,  // Node dev
+    5432,  // PostgreSQL
+    6379,  // Redis
+    9000,  // MinIO
+    9001   // MinIO Console
+  ],
+  
+  "portsAttributes": {
+    "8501": {
+      "label": "PrivateGPT UI",
+      "onAutoForward": "notify",
+      "protocol": "http"
+    },
+    "8000": {
+      "label": "PrivateGPT API",
+      "onAutoForward": "notify",
+      "protocol": "http"
+    },
+    "8888": {
+      "label": "Jupyter Lab",
+      "onAutoForward": "notify",
+      "protocol": "http"
+    },
+    "5432": {
+      "label": "PostgreSQL",
+      "onAutoForward": "silent"
+    },
+    "9000": {
+      "label": "MinIO API",
+      "onAutoForward": "silent"
+    },
+    "9001": {
+      "label": "MinIO Console",
+      "onAutoForward": "notify",
+      "protocol": "http"
+    }
+  },
+  
+  // App ports for browser opening
+  "appPort": [8501, 8000, 8888, 9001],
+  
+  // Customizations
+  "customizations": {
+    "vscode": {
+      "extensions": [
+        "ms-python.python",
+        "ms-python.vscode-pylance",
+        "ms-python.debugpy",
+        "ms-toolsai.jupyter",
+        "ms-toolsai.jupyter-keymap",
+        "ms-toolsai.jupyter-renderers",
+        "ms-toolsai.jupyter-slideshow",
+        "charliermarsh.ruff",
+        "tamasfe.even-better-toml",
+        "redhat.vscode-yaml",
+        "eamodio.gitlens",
+        "ms-azuretools.vscode-docker",
+        "github.vscode-github-actions",
+        "mongodb.mongodb-vscode",
+        "cweijan.vscode-database-client2",
+        "ms-vscode.makefile-tools",
+        "oderwat.indent-rainbow",
+        "usernamehw.errorlens",
+        "wayou.vscode-todo-highlight",
+        "gruntfuggly.todo-tree",
+        "yzhang.markdown-all-in-one",
+        "shd101wyy.markdown-preview-enhanced",
+        "bierner.markdown-mermaid"
+      ],
+      "settings": {
+        "python.defaultInterpreterPath": "/workspace/.venv/bin/python",
+        "python.terminal.activateEnvironment": true,
+        "python.terminal.activateEnvInCurrentTerminal": true,
+        "python.analysis.extraPaths": ["/workspace"],
+        "python.analysis.typeCheckingMode": "basic",
+        "python.analysis.autoImportCompletions": true,
+        "python.linting.enabled": true,
+        "python.linting.ruffEnabled": true,
+        "python.formatting.provider": "ruff",
+        "python.testing.pytestEnabled": true,
+        "python.testing.unittestEnabled": false,
+        "terminal.integrated.defaultProfile.linux": "zsh",
+        "terminal.integrated.profiles.linux": {
+          "zsh": {
+            "path": "/bin/zsh",
+            "icon": "terminal-linux"
+          },
+          "bash": {
+            "path": "/bin/bash",
+            "icon": "terminal-bash"
+          }
+        },
+        "editor.formatOnSave": true,
+        "editor.codeActionsOnSave": {
+          "source.fixAll": "explicit",
+          "source.organizeImports.ruff": "explicit"
+        },
+        "files.autoSave": "afterDelay",
+        "files.autoSaveDelay": 1000,
+        "files.exclude": {
+          "**/__pycache__": true,
+          "**/.pytest_cache": true,
+          "**/.mypy_cache": true,
+          "**/.ruff_cache": true,
+          "**/.coverage": true,
+          "**/.hypothesis": true
+        },
+        "files.watcherExclude": {
+          "**/.git/objects/**": true,
+          "**/.git/subtree-cache/**": true,
+          "**/node_modules/**": true,
+          "**/.venv/**": true,
+          "**/__pycache__/**": true
+        },
+        "jupyter.notebookFileRoot": "/workspace"
+      }
+    }
+  },
+  
+  // Mounts (in addition to docker-compose)
+  "mounts": [
+    "source=${localWorkspaceFolder}/.devcontainer/config,target=/home/vscode/.config,type=bind",
+    "source=${localWorkspaceFolder}/.ssh,target=/home/vscode/.ssh,type=bind"
+  ],
+  
+  // Run arguments
+  "runArgs": [
+    "--init",
+    "--gpus", "all",
+    "--ipc", "host",
+    "--shm-size", "8g",
+    "--ulimit", "memlock=-1",
+    "--ulimit", "stack=67108864"
+  ],
+  
+  // Wait for services
+  "waitFor": {
+    "postgres": {
+      "timeout": 60
+    },
+    "redis": {
+      "timeout": 30
+    }
+  }
+}
