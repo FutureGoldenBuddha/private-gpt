@@ -1,0 +1,200 @@
+version: '3.8'
+
+services:
+  privategpt-dev:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      args:
+        USERNAME: vscode
+        USER_UID: 1000
+        USER_GID: 1000
+    container_name: privategpt-devcontainer
+    hostname: privategpt-dev
+    
+    # Use named volumes for persistence
+    volumes:
+      # Source code volume
+      - privategpt-workspace:/workspace:cached
+      
+      # Data volumes
+      - privategpt-data:/workspace-data:cached
+      - privategpt-models:/workspace-models:cached
+      - privategpt-db:/workspace-db:cached
+      
+      # Docker socket for Docker-in-Docker
+      - /var/run/docker.sock:/var/run/docker.sock
+      
+      # Optional: Host directory for easy file access
+      - ./shared-data:/workspace/shared-data:rw
+      
+      # Optional: GPU support
+      # - /usr/lib/wsl:/usr/lib/wsl:ro  # For WSL2
+      # - /usr/local/cuda:/usr/local/cuda:ro
+    
+    # Environment variables
+    environment:
+      # Python
+      - PYTHONPATH=/workspace
+      - PYTHONUNBUFFERED=1
+      - PYTHONDONTWRITEBYTECODE=1
+      - UV_PROJECT_ENVIRONMENT=/workspace/.venv
+      
+      # PrivateGPT
+      - PGPT_PROFILES=local,dev
+      - PGPT_DATA_DIR=/workspace-data
+      - PGPT_MODELS_DIR=/workspace-models
+      - PGPT_DB_DIR=/workspace-db
+      - PGPT_LOG_LEVEL=INFO
+      
+      # ChromaDB
+      - CHROMA_PERSIST_DIRECTORY=/workspace-db/chroma
+      - CHROMA_COLLECTION_NAME=privategpt
+      
+      # LLM API Keys (set in .env file)
+      - OPENAI_API_KEY=${OPENAI_API_KEY:-}
+      - ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY:-}
+      - GROQ_API_KEY=${GROQ_API_KEY:-}
+      - TOGETHER_API_KEY=${TOGETHER_API_KEY:-}
+      - COHERE_API_KEY=${COHERE_API_KEY:-}
+      
+      # UI
+      - STREAMLIT_SERVER_PORT=8501
+      - STREAMLIT_SERVER_ADDRESS=0.0.0.0
+      
+      # Terminal
+      - TERM=xterm-256color
+      - SHELL=/bin/bash
+      
+      # User
+      - USER=vscode
+      - HOME=/home/vscode
+    
+    # Ports
+    ports:
+      - "8501:8501"  # Streamlit UI
+      - "8000:8000"  # FastAPI
+      - "8888:8888"  # Jupyter Lab
+      - "3000:3000"  # Optional: Node.js dev server
+    
+    # Development settings
+    stdin_open: true
+    tty: true
+    init: true
+    
+    # Working directory
+    working_dir: /workspace
+    
+    # Keep container running
+    command: sleep infinity
+    
+    # Health check
+    healthcheck:
+      test: ["CMD", "python", "-c", "import sys; sys.exit(0)"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+    
+    # Resource limits
+    deploy:
+      resources:
+        reservations:
+          devices:
+            # GPU support (uncomment if you have NVIDIA GPU)
+            # - driver: nvidia
+            #   count: all
+            #   capabilities: [gpu]
+        limits:
+          memory: 16G
+          cpus: '4.0'
+    
+    # Labels
+    labels:
+      - "com.privategpt.environment=development"
+      - "com.privategpt.project=private-gpt"
+    
+    # Network
+    networks:
+      - privategpt-network
+
+  # Optional: PostgreSQL for persistent storage
+  postgres:
+    image: postgres:15-alpine
+    container_name: privategpt-postgres
+    environment:
+      - POSTGRES_DB=privategpt
+      - POSTGRES_USER=privategpt
+      - POSTGRES_PASSWORD=privategpt123
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+    ports:
+      - "5432:5432"
+    networks:
+      - privategpt-network
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U privategpt"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # Optional: Redis for caching
+  redis:
+    image: redis:7-alpine
+    container_name: privategpt-redis
+    command: redis-server --appendonly yes
+    volumes:
+      - redis-data:/data
+    ports:
+      - "6379:6379"
+    networks:
+      - privategpt-network
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # Optional: MinIO for file storage
+  minio:
+    image: minio/minio:latest
+    container_name: privategpt-minio
+    command: server /data --console-address ":9001"
+    environment:
+      - MINIO_ROOT_USER=minioadmin
+      - MINIO_ROOT_PASSWORD=minioadmin123
+    volumes:
+      - minio-data:/data
+    ports:
+      - "9000:9000"
+      - "9001:9001"
+    networks:
+      - privategpt-network
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:9000/minio/health/live"]
+      interval: 30s
+      timeout: 20s
+      retries: 3
+
+# Named volumes for persistence
+volumes:
+  privategpt-workspace:
+    driver: local
+  privategpt-data:
+    driver: local
+  privategpt-models:
+    driver: local
+  privategpt-db:
+    driver: local
+  postgres-data:
+    driver: local
+  redis-data:
+    driver: local
+  minio-data:
+    driver: local
+
+# Networks
+networks:
+  privategpt-network:
+    driver: bridge
+    name: privategpt-network
