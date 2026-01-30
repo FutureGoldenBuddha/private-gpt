@@ -1,3 +1,5 @@
+version: '3.8'
+
 services:
   privategpt-dev:
     build:
@@ -9,6 +11,9 @@ services:
         USER_GID: 1000
     container_name: privategpt-devcontainer
     hostname: privategpt-dev
+    
+    # NVIDIA Runtime
+    runtime: nvidia
     
     # Use named volumes for persistence
     volumes:
@@ -25,6 +30,10 @@ services:
       
       # Optional: Host directory for easy file access
       - ./shared-data:/workspace/shared-data:rw
+      
+      # NVIDIA libraries
+      - /usr/lib/wsl:/usr/lib/wsl:ro  # For WSL2
+      - /usr/lib/x86_64-linux-gnu:/usr/lib/x86_64-linux-gnu:ro
     
     # Environment variables
     environment:
@@ -34,12 +43,24 @@ services:
       - PYTHONDONTWRITEBYTECODE=1
       - UV_PROJECT_ENVIRONMENT=/workspace/.venv
       
+      # NVIDIA/CUDA
+      - NVIDIA_VISIBLE_DEVICES=all
+      - NVIDIA_DRIVER_CAPABILITIES=compute,utility,graphics,video
+      - CUDA_VISIBLE_DEVICES=0
+      - TF_FORCE_GPU_ALLOW_GROWTH=true
+      - TF_CPP_MIN_LOG_LEVEL=0
+      
+      # PyTorch
+      - TORCH_CUDA_ARCH_LIST="7.5;8.0;8.6;8.9;9.0"
+      - TORCH_NVCC_FLAGS="-Xfatbin -compress-all"
+      
       # PrivateGPT
-      - PGPT_PROFILES=local,dev
+      - PGPT_PROFILES=local,dev,gpu
       - PGPT_DATA_DIR=/workspace-data
       - PGPT_MODELS_DIR=/workspace-models
       - PGPT_DB_DIR=/workspace-db
       - PGPT_LOG_LEVEL=INFO
+      - PGPT_DEVICE=cuda:0
       
       # ChromaDB
       - CHROMA_PERSIST_DIRECTORY=/workspace-db/chroma
@@ -84,20 +105,26 @@ services:
     
     # Health check
     healthcheck:
-      test: ["CMD", "python", "-c", "import sys; sys.exit(0)"]
+      test: ["CMD", "python", "-c", "import torch; print(f'CUDA available: {torch.cuda.is_available()}'); import sys; sys.exit(0)"]
       interval: 30s
       timeout: 10s
       retries: 3
       start_period: 40s
     
-    # Resource limits (simplified - remove problematic deploy section)
-    mem_limit: 16G
-    cpus: 4.0
+    # Deploy configuration for GPU (correct syntax)
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: all
+              capabilities: [gpu]
     
     # Labels
     labels:
       - "com.privategpt.environment=development"
       - "com.privategpt.project=private-gpt"
+      - "com.privategpt.gpu=true"
     
     # Network
     networks:
