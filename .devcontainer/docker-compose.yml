@@ -1,5 +1,3 @@
-version: '3.8'
-
 services:
   privategpt-dev:
     build:
@@ -27,10 +25,6 @@ services:
       
       # Optional: Host directory for easy file access
       - ./shared-data:/workspace/shared-data:rw
-      
-      # Optional: GPU support
-      - /usr/lib/wsl:/usr/lib/wsl:ro  # For WSL2
-      - /usr/local/cuda:/usr/local/cuda:ro
     
     # Environment variables
     environment:
@@ -96,18 +90,9 @@ services:
       retries: 3
       start_period: 40s
     
-    # Resource limits
-    deploy:
-      resources:
-        reservations:
-          devices:
-            # GPU support (uncomment if you have NVIDIA GPU)
-            # - driver: nvidia
-            #   count: all
-            #   capabilities: [gpu]
-        limits:
-          memory: 16G
-          cpus: '4.0'
+    # Resource limits (simplified - remove problematic deploy section)
+    mem_limit: 16G
+    cpus: 4.0
     
     # Labels
     labels:
